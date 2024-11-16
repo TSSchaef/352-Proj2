@@ -13,6 +13,22 @@ void reset_requested() {
 void reset_finished() {
 }
 
+void *read(void *arg){
+    return NULL;
+}
+void *countInput(void *arg){
+    return NULL;
+}
+void *encrypt_func(void *arg){
+    return NULL;
+}
+void *countOutput(void *arg){
+    return NULL;
+}
+void *write(void *arg){
+    return NULL;
+}
+
 int main(int argc, char *argv[]) {
     if(argc != 4){
         fprintf(stderr, "ERROR: Must pass 3 files as commnad line arguments\n\"./encrypt in.txt out.txt log.txt\"\n");
@@ -44,16 +60,28 @@ int main(int argc, char *argv[]) {
     init_buffer(&inputBuf, inputBufSize);
     init_buffer(&outputBuf, outputBufSize);
 	
-    char c;
-	while ((c = read_input()) != EOF) { 
+    
+	/*while ((c = read_input()) != EOF) { 
 		count_input(c); 
 		c = encrypt(c); 
 		count_output(c); 
 		write_output(c); 
-	} 
+	} */
+
+    pthread_t reader, input_counter, encryptor, output_counter, writer;
+    pthread_create(&reader, NULL, &read, NULL);
+    pthread_create(&input_counter, NULL, &countInput, NULL);
+    pthread_create(&encryptor, NULL, &encrypt_func, NULL);
+    pthread_create(&output_counter, NULL, &countOutput, NULL);
+    pthread_create(&writer, NULL, &write, NULL);
+
+    pthread_join(reader, NULL);
+    pthread_join(input_counter, NULL);
+    pthread_join(encryptor, NULL);
+    pthread_join(output_counter, NULL);
+    pthread_join(writer, NULL);
 
 	printf("End of file reached.\n"); 
-
 	log_counts();
     delete_buffer(&inputBuf);
     delete_buffer(&outputBuf);
