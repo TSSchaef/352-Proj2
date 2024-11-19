@@ -16,6 +16,7 @@ typedef struct {
     int head;
     int tail;
     int countPtr;
+    pthread_mutex_t lock;
 } circular_buffer;
 
 void init_buffer(circular_buffer *buf, int size);

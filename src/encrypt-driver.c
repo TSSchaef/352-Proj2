@@ -5,6 +5,7 @@
 
 int inputBufSize = -1, outputBufSize = -1;
 circular_buffer inputBuf, outputBuf;
+bool hitEOF = false, inputCounted = false, allEncrypted = false, outputCounted = false;
 
 void reset_requested() {
 	log_counts();
@@ -14,18 +15,92 @@ void reset_finished() {
 }
 
 void *read(void *arg){
+    char c;
+    while(1){
+        while(canAdd(inputBuf)){
+            pthread_mutex_lock(&(inputBuf.lock));
+            
+            if((c = read_input()) == EOF){
+                hitEOF = true;
+                pthread_mutex_unlock(&(inputBuf.lock));
+                goto StopReading;
+            }
+            push(&inputBuf, c);
+
+            pthread_mutex_unlock(&(inputBuf.lock));
+        }
+    }
+StopReading:
     return NULL;
 }
+
 void *countInput(void *arg){
+    while(1){
+        while(canCount(inputBuf)){
+            pthread_mutex_lock(&(inputBuf.lock));
+
+            count_input(countNext(&inputBuf));
+
+            pthread_mutex_unlock(&(inputBuf.lock));
+        }
+        if(!canCount(inputBuf) && hitEOF){
+            inputCounted = true;
+            break;
+        }
+    }
     return NULL;
 }
 void *encrypt_func(void *arg){
+    while(1){
+        while(canPop(inputBuf)){
+            pthread_mutex_lock(&(inputBuf.lock));
+
+            if(canAdd(outputBuf)){
+                pthread_mutex_lock(&(outputBuf.lock));
+
+                push(&outputBuf, encrypt(pop(&inputBuf)));
+
+                pthread_mutex_unlock(&(outputBuf.lock));
+            }
+
+            pthread_mutex_unlock(&(inputBuf.lock));
+        }
+        if(!canPop(inputBuf) && inputCounted){
+            allEncrypted = true;
+            break;
+        }
+    }
     return NULL;
 }
 void *countOutput(void *arg){
+    while(1){
+        while(canCount(outputBuf)){
+            pthread_mutex_lock(&(outputBuf.lock));
+
+            count_output(countNext(&outputBuf));
+
+            pthread_mutex_unlock(&(outputBuf.lock));
+        }
+        if(!canCount(outputBuf) && allEncrypted){
+            outputCounted = true;
+            break;
+        }
+    }
     return NULL;
 }
 void *write(void *arg){
+    while(1){
+        while(canPop(outputBuf)){
+            pthread_mutex_lock(&(outputBuf.lock));
+            
+            write_output(pop(&outputBuf));
+
+            pthread_mutex_unlock(&(outputBuf.lock));
+        }
+        if(!canPop(outputBuf) && outputCounted){
+            break;
+        }
+    }
     return NULL;
 }
 

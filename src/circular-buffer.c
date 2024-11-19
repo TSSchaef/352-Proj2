@@ -1,4 +1,5 @@
 #include "circular-buffer.h"
+#include <pthread.h>
 
 void init_buffer(circular_buffer *buf, int size){
     buf->buffer = (element *) malloc(sizeof(element) * size);
@@ -6,6 +7,7 @@ void init_buffer(circular_buffer *buf, int size){
     buf->head = 0;
     buf->countPtr = 0;
     buf->tail = 0;
+    //pthread_mutex_init(&buf->lock, NULL);
 }
 
 void delete_buffer(circular_buffer *buf){
