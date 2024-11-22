@@ -1,6 +1,13 @@
 #include "circular-buffer.h"
 #include <pthread.h>
 
+/*
+    Implementation of circular buffer functionality. 
+    "can..." functions need to be called/checked before calling the 
+    corresponding functionality, otherwise the data structure can
+    become corrupted.
+*/ 
+
 void init_buffer(circular_buffer *buf, int size){
     buf->buffer = (element *) malloc(sizeof(element) * size);
     buf->size = size;

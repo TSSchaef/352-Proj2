@@ -1,12 +1,19 @@
 #ifndef CIRCULAR_BUFFER
 #define CIRCULAR_BUFFER
 
+/*
+    Header file for a circular buffer data structure. The buffer must be
+    initialized and destroyed and will hold exactly "size" elements (at most)
+    Mutex locks within each element allow each "slot" of the buffer to be
+    accessed by different threads concurrently
+*/
 #include <stdbool.h>
 #include <stdlib.h>
 #include <pthread.h>
 
 typedef struct{
     char c;
+    // Extra boolean with each element to denote that it has been counted
     bool counted;
     pthread_mutex_t lock;
 } element;
