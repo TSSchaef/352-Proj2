@@ -7,14 +7,14 @@ void init_buffer(circular_buffer *buf, int size){
     buf->head = 0;
     buf->countPtr = 0;
     buf->tail = 0;
-    //pthread_mutex_init(&buf->lock, NULL);
 }
 
 void delete_buffer(circular_buffer *buf){
     free(buf->buffer);
 }
 
-bool canAdd(const circular_buffer buf){
+bool canAdd(const circular_buffer buf, pthread_mutex_t *lock){
+    *lock = buf.buffer[buf.tail].lock;
     return ((buf.tail + 1) % buf.size) != buf.head;
 }
 
@@ -24,7 +24,8 @@ void push(circular_buffer *buf, char toAdd){
     buf->tail = (buf->tail + 1) % buf->size;
 }
 
-bool canPop(const circular_buffer buf){
+bool canPop(const circular_buffer buf, pthread_mutex_t *lock){
+    *lock = buf.buffer[buf.head].lock;
     return !isEmpty(buf) && buf.buffer[buf.head].counted;
 }
 
@@ -38,7 +39,8 @@ bool isEmpty(const circular_buffer buf){
     return buf.head == buf.tail;
 }
 
-bool canCount(const circular_buffer buf){
+bool canCount(const circular_buffer buf, pthread_mutex_t *lock){
+    *lock = buf.buffer[buf.countPtr].lock;
     return buf.countPtr != buf.tail;
 }
 

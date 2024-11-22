@@ -6,28 +6,43 @@
 int inputBufSize = -1, outputBufSize = -1;
 circular_buffer inputBuf, outputBuf;
 bool hitEOF = false, inputCounted = false, allEncrypted = false, outputCounted = false;
+bool resetting = false;
+bool hitReset = false, inputCntReset = false, encryptReset = false, 
+     outputCntReset = false, writeReset = false;
 
 void reset_requested() {
+    resetting = true;
+    while(!writeReset);
 	log_counts();
 }
 
 void reset_finished() {
+    hitReset = false;
+    inputCntReset = false;
+    encryptReset = false;
+    outputCntReset = false;
+    writeReset = false;
+    resetting = false;
 }
 
 void *read(void *arg){
+    pthread_mutex_t lock;
     char c;
     while(1){
-        while(canAdd(inputBuf)){
-            pthread_mutex_lock(&(inputBuf.lock));
+        while(canAdd(inputBuf, &lock) && !resetting){
+            pthread_mutex_lock(&(lock));
             
             if((c = read_input()) == EOF){
                 hitEOF = true;
-                pthread_mutex_unlock(&(inputBuf.lock));
+                pthread_mutex_unlock(&(lock));
                 goto StopReading;
             }
             push(&inputBuf, c);
 
-            pthread_mutex_unlock(&(inputBuf.lock));
+            pthread_mutex_unlock(&(lock));
+        }
+        if(resetting){
+            hitReset = true;
         }
     }
 StopReading:
@@ -35,101 +50,122 @@ StopReading:
 }
 
 void *countInput(void *arg){
+    pthread_mutex_t lock;
     while(1){
-        while(canCount(inputBuf)){
-            pthread_mutex_lock(&(inputBuf.lock));
+        while(canCount(inputBuf, &lock)){
+            pthread_mutex_lock(&(lock));
 
             count_input(countNext(&inputBuf));
 
-            pthread_mutex_unlock(&(inputBuf.lock));
+            pthread_mutex_unlock(&(lock));
         }
-        if(!canCount(inputBuf) && hitEOF){
+        if(!canCount(inputBuf, &lock) && hitEOF){
             inputCounted = true;
             break;
+        }
+        if(!canCount(inputBuf, &lock) && hitReset){
+            inputCntReset = true;
         }
     }
     return NULL;
 }
 void *encrypt_func(void *arg){
+    pthread_mutex_t inputLock, outputLock;
     while(1){
-        while(canPop(inputBuf)){
-            pthread_mutex_lock(&(inputBuf.lock));
+        while(canPop(inputBuf, &inputLock)){
+            pthread_mutex_lock(&(inputLock));
 
-            if(canAdd(outputBuf)){
-                pthread_mutex_lock(&(outputBuf.lock));
+            if(canAdd(outputBuf, &outputLock)){
+                pthread_mutex_lock(&(outputLock));
 
                 push(&outputBuf, encrypt(pop(&inputBuf)));
 
-                pthread_mutex_unlock(&(outputBuf.lock));
+                pthread_mutex_unlock(&(outputLock));
             }
 
-            pthread_mutex_unlock(&(inputBuf.lock));
+            pthread_mutex_unlock(&(inputLock));
         }
-        if(!canPop(inputBuf) && inputCounted){
+        if(!canPop(inputBuf, &inputLock) && inputCounted){
             allEncrypted = true;
             break;
+        }
+        if(!canPop(inputBuf, &inputLock) && inputCntReset){
+            encryptReset = true;
         }
     }
     return NULL;
 }
 void *countOutput(void *arg){
+    pthread_mutex_t lock;
     while(1){
-        while(canCount(outputBuf)){
-            pthread_mutex_lock(&(outputBuf.lock));
+        while(canCount(outputBuf, &lock)){
+            pthread_mutex_lock(&(lock));
 
             count_output(countNext(&outputBuf));
 
-            pthread_mutex_unlock(&(outputBuf.lock));
+            pthread_mutex_unlock(&(lock));
         }
-        if(!canCount(outputBuf) && allEncrypted){
+        if(!canCount(outputBuf, &lock) && allEncrypted){
             outputCounted = true;
             break;
+        }
+        if(!canCount(outputBuf, &lock) && encryptReset){
+            outputCntReset = true;
         }
     }
     return NULL;
 }
 void *write(void *arg){
+    pthread_mutex_t lock;
     while(1){
-        while(canPop(outputBuf)){
-            pthread_mutex_lock(&(outputBuf.lock));
+        while(canPop(outputBuf, &lock)){
+            pthread_mutex_lock(&(lock));
             
             write_output(pop(&outputBuf));
 
-            pthread_mutex_unlock(&(outputBuf.lock));
+            pthread_mutex_unlock(&(lock));
         }
-        if(!canPop(outputBuf) && outputCounted){
+        if(!canPop(outputBuf, &lock) && outputCounted){
             break;
+        }
+        if(!canPop(outputBuf, &lock) && outputCntReset){
+            writeReset = true;
         }
     }
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
-    if(argc != 4){
+    if(argc != 4 && argc != 6){
         fprintf(stderr, "ERROR: Must pass 3 files as commnad line arguments\n\"./encrypt in.txt out.txt log.txt\"\n");
         return -1;
     }  
+    
+    init(argv[1], argv[2], argv[3]); 
 
-	init(argv[1], argv[2], argv[3]); 
+    if(argc == 4){
+        while(inputBufSize <= 1){
+            printf("Enter the input buffer size: \n");
+            if(scanf("%d", &inputBufSize) != 1){
+                fprintf(stderr, "ERROR: Scanf error");
+            }
+            if(inputBufSize <= 1){
+                fprintf(stderr, "ERROR: Buffer size must be >1");
+            }
+        }
 
-    while(inputBufSize <= 1){
-        printf("Enter the input buffer size: \n");
-        if(scanf("%d", &inputBufSize) != 1){
-           fprintf(stderr, "ERROR: Scanf error");
+        while(outputBufSize <= 1){
+            printf("Enter the output buffer size: \n");
+            if(scanf("%d", &outputBufSize) != 1){
+                fprintf(stderr, "ERROR: Scanf error");
+            }
+            if(outputBufSize <= 1){
+                fprintf(stderr, "ERROR: Buffer size must be >1");
+            }
         }
-        if(inputBufSize <= 1){
-           fprintf(stderr, "ERROR: Buffer size must be >1");
-        }
-    }
-
-    while(outputBufSize <= 1){
-        printf("Enter the output buffer size: \n");
-        if(scanf("%d", &outputBufSize) != 1){
-           fprintf(stderr, "ERROR: Scanf error");
-        }
-        if(outputBufSize <= 1){
-            fprintf(stderr, "ERROR: Buffer size must be >1");
-        }
+    } else {
+        inputBufSize = atoi(argv[4]);
+        outputBufSize = atoi(argv[5]);
     }
 
     init_buffer(&inputBuf, inputBufSize);
