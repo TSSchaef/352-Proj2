@@ -8,11 +8,18 @@ circular_buffer inputBuf, outputBuf;
 bool hitEOF = false, inputCounted = false, allEncrypted = false, outputCounted = false;
 bool resetting = false;
 bool hitReset = false, inputCntReset = false, encryptReset = false, 
-     outputCntReset = false, writeReset = false;
+     outputCntReset = false;
+
+pthread_mutex_t resetLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t readLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t readyToReset = PTHREAD_COND_INITIALIZER;
+pthread_cond_t finishedReset = PTHREAD_COND_INITIALIZER;
 
 void reset_requested() {
     resetting = true;
-    while(!writeReset);
+    pthread_mutex_lock(&resetLock);
+    pthread_cond_wait(&readyToReset, &resetLock);
+    pthread_mutex_unlock(&resetLock);
 	log_counts();
 }
 
@@ -21,15 +28,19 @@ void reset_finished() {
     inputCntReset = false;
     encryptReset = false;
     outputCntReset = false;
-    writeReset = false;
     resetting = false;
+    pthread_cond_signal(&finishedReset);
 }
 
 void *read(void *arg){
     pthread_mutex_t lock;
     char c;
     while(1){
-        while(canAdd(inputBuf, &lock) && !resetting){
+        while(canAdd(inputBuf, &lock)){
+            if(resetting){
+                break;
+            }
+
             pthread_mutex_lock(&(lock));
             
             if((c = read_input()) == EOF){
@@ -41,10 +52,16 @@ void *read(void *arg){
 
             pthread_mutex_unlock(&(lock));
         }
+
         if(resetting){
             hitReset = true;
+            pthread_mutex_lock(&readLock);
+            pthread_cond_wait(&finishedReset, &readLock);
+            pthread_mutex_unlock(&readLock);
         }
+
     }
+
 StopReading:
     return NULL;
 }
@@ -69,6 +86,7 @@ void *countInput(void *arg){
     }
     return NULL;
 }
+
 void *encrypt_func(void *arg){
     pthread_mutex_t inputLock, outputLock;
     while(1){
@@ -95,6 +113,7 @@ void *encrypt_func(void *arg){
     }
     return NULL;
 }
+
 void *countOutput(void *arg){
     pthread_mutex_t lock;
     while(1){
@@ -115,6 +134,7 @@ void *countOutput(void *arg){
     }
     return NULL;
 }
+
 void *write(void *arg){
     pthread_mutex_t lock;
     while(1){
@@ -129,7 +149,7 @@ void *write(void *arg){
             break;
         }
         if(!canPop(outputBuf, &lock) && outputCntReset){
-            writeReset = true;
+            pthread_cond_signal(&readyToReset);
         }
     }
     return NULL;
