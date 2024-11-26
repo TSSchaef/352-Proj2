@@ -14,6 +14,10 @@ void init_buffer(circular_buffer *buf, int size){
     buf->head = 0;
     buf->countPtr = 0;
     buf->tail = 0;
+    int i;
+    for(i = 0; i < size; i++){
+        buf->buffer[i].counted = false;
+    }
 }
 
 void delete_buffer(circular_buffer *buf){
