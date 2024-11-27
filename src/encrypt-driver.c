@@ -11,18 +11,18 @@ bool resetting = false;
 bool hitReset = false, inputCntReset = false, encryptReset = false, 
      outputCntReset = false;
 
-sem_t input, inputCnt, inputAvailable, output, outputCnt, outputAvailable;
-
-pthread_mutex_t resetLock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t readLock = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t readyToReset = PTHREAD_COND_INITIALIZER;
-pthread_cond_t finishedReset = PTHREAD_COND_INITIALIZER;
+sem_t reset, resetDone;
 
 void reset_requested() {
     resetting = true;
-    pthread_mutex_lock(&resetLock);
-    pthread_cond_wait(&readyToReset, &resetLock);
-    pthread_mutex_unlock(&resetLock);
+
+    //wait for each of the threads
+    sem_wait(&reset);
+    sem_wait(&reset);
+    sem_wait(&reset);
+    sem_wait(&reset);
+    sem_wait(&reset);
+
 	log_counts();
 }
 
@@ -32,89 +32,61 @@ void reset_finished() {
     encryptReset = false;
     outputCntReset = false;
     resetting = false;
-    pthread_cond_signal(&finishedReset);
+
+    sem_post(&resetDone);
+    sem_post(&resetDone);
+    sem_post(&resetDone);
+    sem_post(&resetDone);
+    sem_post(&resetDone);
 }
 
 void *read(void *arg){
-    pthread_mutex_t lock;
     char c;
     while(1){
         if(resetting){
             hitReset = true;
-            //get the next thread out of waiting
-            sem_post(&input);
-            pthread_mutex_lock(&readLock);
-            pthread_cond_wait(&finishedReset, &readLock);
-            pthread_mutex_unlock(&readLock);
+            sem_post(&reset);
+            sem_wait(&resetDone);
         }
 
-        //sem_wait(&inputAvailable);
-        if(canAdd(inputBuf, &lock)){
-            pthread_mutex_lock(&(lock));
-            
+        if(canAdd(inputBuf)){
             if((c = read_input()) == EOF){
                 hitEOF = true;
-                //get the next thread out of waiting
-                sem_post(&input);
-                pthread_mutex_unlock(&(lock));
                 break;
             }
             push(&inputBuf, c);
-            sem_post(&input);
-
-            pthread_mutex_unlock(&(lock));
-        }/* else {
-            fprintf(stderr, "ERROR: Error in semaphore logic, read thread\n");
-            exit(0);
-        }*/
+        }
     }
 
     return NULL;
 }
 
 void *countInput(void *arg){
-    pthread_mutex_t lock;
     bool hasWork;
     while(1){
-        //sem_wait(&input);
-        hasWork = canCount(inputBuf, &lock);
+        hasWork = canCount(inputBuf);
         if(hitEOF && !hasWork){
             inputCounted = true;
-            //wake the next thread
-            sem_post(&inputCnt);
             break;
         }
 
         if(hitReset && !hasWork){
             inputCntReset = true;
-            //wake the next thread
-            sem_post(&inputCnt);
-            continue;
+            sem_post(&reset);
+            sem_wait(&resetDone);
         }
 
         if(hasWork){
-            pthread_mutex_lock(&(lock));
-
             count_input(countNext(&inputBuf));
-            sem_post(&inputCnt);
-
-            pthread_mutex_unlock(&(lock));
-        }/* else {
-            fprintf(stderr, "ERROR: Error in semaphore logic, input count thread\n");
-            exit(0);
-        }*/
-
-
+        }
     }
     return NULL;
 }
 
 void *encrypt_func(void *arg){
-    pthread_mutex_t inputLock, outputLock;
     bool hasWork;
     while(1){
-        //sem_wait(&inputCnt);
-        hasWork = canPop(inputBuf, &inputLock);
+        hasWork = canPop(inputBuf);
         if(inputCounted && !hasWork){
             allEncrypted = true;
             break;
@@ -122,68 +94,53 @@ void *encrypt_func(void *arg){
 
         if(inputCntReset && !hasWork){
             encryptReset = true;
-            continue;
+            sem_post(&reset);
+            sem_wait(&resetDone);
         }
 
         if(hasWork){
-            pthread_mutex_lock(&(inputLock));
-
-            if(canAdd(outputBuf, &outputLock)){
-                pthread_mutex_lock(&(outputLock));
-
+            if(canAdd(outputBuf)){
                 push(&outputBuf, encrypt(pop(&inputBuf)));
-                sem_post(&inputAvailable);
-
-                pthread_mutex_unlock(&(outputLock));
-            } else {
-                sem_post(&inputCnt);
             }
-
-            pthread_mutex_unlock(&(inputLock));
-        }/* else {
-            fprintf(stderr, "ERROR: Error in semaphore logic, encrypt thread\n");
-            exit(0);
-        }*/
+        }
     }
     return NULL;
 }
 
 void *countOutput(void *arg){
-    pthread_mutex_t lock;
+    bool hasWork;
     while(1){
-        if(canCount(outputBuf, &lock)){
-            pthread_mutex_lock(&(lock));
+        hasWork = canCount(outputBuf);
 
+        if(hasWork){
             count_output(countNext(&outputBuf));
-
-            pthread_mutex_unlock(&(lock));
         }
-        if(!canCount(outputBuf, &lock) && allEncrypted){
+        if(allEncrypted && !hasWork){
             outputCounted = true;
             break;
         }
-        if(!canCount(outputBuf, &lock) && encryptReset){
+        if(encryptReset && !hasWork){
             outputCntReset = true;
+            sem_post(&reset);
+            sem_wait(&resetDone);
         }
     }
     return NULL;
 }
 
 void *write(void *arg){
-    pthread_mutex_t lock;
+    bool hasWork;
     while(1){
-        if(canPop(outputBuf, &lock)){
-            pthread_mutex_lock(&(lock));
-            
+        hasWork = canPop(outputBuf);
+        if(hasWork){
             write_output(pop(&outputBuf));
-
-            pthread_mutex_unlock(&(lock));
         }
-        if(!canPop(outputBuf, &lock) && outputCounted){
+        if(outputCounted && !hasWork){
             break;
         }
-        if(!canPop(outputBuf, &lock) && outputCntReset){
-            pthread_cond_signal(&readyToReset);
+        if(outputCntReset && !hasWork){
+            sem_post(&reset);
+            sem_wait(&resetDone);
         }
     }
     return NULL;
@@ -225,13 +182,9 @@ int main(int argc, char *argv[]) {
     init_buffer(&inputBuf, inputBufSize);
     init_buffer(&outputBuf, outputBufSize);
 	
-    sem_init(&input, 0, 0);
-    sem_init(&inputCnt, 0, 0);
-    sem_init(&inputAvailable, 0, inputBufSize - 1);
-    sem_init(&output, 0, 0);
-    sem_init(&outputCnt, 0, 0);
-    sem_init(&outputAvailable, 0, outputBufSize - 1);
-    
+    sem_init(&reset, 0, 0);
+    sem_init(&resetDone, 0, 0);
+
 	/*while ((c = read_input()) != EOF) { 
 		count_input(c); 
 		c = encrypt(c); 
@@ -257,10 +210,6 @@ int main(int argc, char *argv[]) {
     delete_buffer(&inputBuf);
     delete_buffer(&outputBuf);
 
-    sem_destroy(&input);
-    sem_destroy(&inputCnt);
-    sem_destroy(&inputAvailable);
-    sem_destroy(&output);
-    sem_destroy(&outputCnt);
-    sem_destroy(&outputAvailable);
+    sem_destroy(&reset);
+    sem_destroy(&resetDone);
 }

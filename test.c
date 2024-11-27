@@ -55,21 +55,25 @@ int main(int argc, char *argv[]) {
     }
 
     bool allTestsPassed = true;
+    int numTests = 0, passed = 0;
     while (!feof(file)) {
         char line[MAX_LINE_LENGTH];
         if (fgets(line, sizeof(line), file) && strstr(line, "Counts using key")) {
             // Process each block
             bool result = process_block(file);
-            if (!result) {
-                printf("Test failed\n");
+            if (result) {
+               passed++; 
+            } else {
                 allTestsPassed = false;
-                break;
             }
         }
+        numTests++;
     }
 
     if (allTestsPassed) {
-        printf("Test passed\n");
+        printf("Test PASSED\n");
+    } else {
+        printf("Test FAILED: %d / %d \n", passed, numTests);
     }
 
     fclose(file);

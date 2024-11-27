@@ -10,12 +10,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 typedef struct{
     char c;
-    // Extra boolean with each element to denote that it has been counted
-    bool counted;
-    pthread_mutex_t lock;
 } element;
 
 typedef struct {
@@ -24,21 +22,25 @@ typedef struct {
     int head;
     int tail;
     int countPtr;
+    sem_t canCount;
+    sem_t canAdd;
+    sem_t canPop;
+    
 } circular_buffer;
 
 void init_buffer(circular_buffer *buf, int size);
 void delete_buffer(circular_buffer *buf);
 
-bool canAdd(const circular_buffer buf, pthread_mutex_t *lock);
+bool canAdd(const circular_buffer buf);
 // MUST check canAdd before pushing (can overwrite data and break buffer)
 void push(circular_buffer *buf, char toAdd);
 
-bool canPop(const circular_buffer buf, pthread_mutex_t *lock);
+bool canPop(const circular_buffer buf);
 // MUST check canPop before pop
 char pop(circular_buffer *buf);
 bool isEmpty(const circular_buffer buf);
 
-bool canCount(const circular_buffer buf, pthread_mutex_t *lock);
+bool canCount(const circular_buffer buf);
 // MUST check canCount before countNext
 char countNext(circular_buffer *buf);
 
