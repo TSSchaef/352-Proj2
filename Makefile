@@ -5,7 +5,7 @@ INCDIRS=src
 
 CC=gcc
 DEV-OPT=-O0
-PROD-OPT=-O3
+PROD-OPT=-O0
 LIBFLAGS=-lm -lpthread
 DEPFLAGS=-MP -MD
 DEV-CFLAGS=-Wall -Werror -g $(foreach D, $(INCDIRS), -I$(D)) $(DEV-OPT) $(DEPFLAGS)

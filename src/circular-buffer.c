@@ -26,22 +26,38 @@ void delete_buffer(circular_buffer *buf){
     sem_destroy(&(buf->canPop));
 }
 
-bool canAdd(const circular_buffer buf){
-    return ((buf.tail + 1) % buf.size) != buf.head;
+bool canAdd(circular_buffer buf){
+    int value;
+    sem_getvalue(&(buf.canAdd), &value);
+    return value > 0;
 }
 
 void push(circular_buffer *buf, char toAdd){
+    /*int value;
+    sem_getvalue(&(buf->canAdd), &value);
+    if(value <= 0){
+        fprintf(stderr, "ERROR: Tried pushing but unable to, can add value: %d\n", value);
+        exit(0);
+    }*/
     sem_wait(&(buf->canAdd));
     buf->buffer[buf->tail].c = toAdd;
     buf->tail = (buf->tail + 1) % buf->size;
     sem_post(&(buf->canCount));
 }
 
-bool canPop(const circular_buffer buf){
-    return !isEmpty(buf) && buf.head != buf.countPtr;
+bool canPop(circular_buffer buf){
+    int value;
+    sem_getvalue(&(buf.canPop), &value);
+    return value > 0;
 }
 
 char pop(circular_buffer *buf){
+    /*int value;
+    sem_getvalue(&(buf->canPop), &value);
+    if(value <= 0){
+        fprintf(stderr, "ERROR: Tried popping but unable to\n");
+        exit(0);
+    }*/
     sem_wait(&(buf->canPop));
     char c = buf->buffer[buf->head].c;
     buf->head = (buf->head + 1) % buf->size;
@@ -53,11 +69,19 @@ bool isEmpty(const circular_buffer buf){
     return buf.head == buf.tail;
 }
 
-bool canCount(const circular_buffer buf){
-    return buf.countPtr != buf.tail;
+bool canCount(circular_buffer buf){
+    int value;
+    sem_getvalue(&(buf.canCount), &value);
+    return value > 0;
 }
 
 char countNext(circular_buffer *buf){
+    /*int value;
+    sem_getvalue(&(buf->canCount), &value);
+    if(value <= 0){
+        fprintf(stderr, "ERROR: Tried counting but unable to\n");
+        exit(0);
+    }*/
     sem_wait(&(buf->canCount));
     char c = buf->buffer[buf->countPtr].c;
     buf->countPtr = (buf->countPtr + 1) % buf->size;
