@@ -6,6 +6,7 @@
 
 int inputBufSize = -1, outputBufSize = -1;
 circular_buffer inputBuf, outputBuf;
+
 bool hitEOF = false, inputCounted = false, allEncrypted = false, outputCounted = false;
 bool resetting = false;
 bool hitReset = false, inputCntReset = false, encryptReset = false, 
@@ -16,7 +17,6 @@ sem_t reset, resetDone;
 
 void reset_requested() {
     resetting = true;
-
     //wait for each of the threads
     sem_wait(&reset);
     sem_wait(&reset);
@@ -33,7 +33,8 @@ void reset_finished() {
     encryptReset = false;
     outputCntReset = false;
     resetting = false;
-
+    
+    //let the threads continue
     sem_post(&resetDone);
     sem_post(&resetDone);
     sem_post(&resetDone);

@@ -33,12 +33,6 @@ bool canAdd(circular_buffer buf){
 }
 
 void push(circular_buffer *buf, char toAdd){
-    /*int value;
-    sem_getvalue(&(buf->canAdd), &value);
-    if(value <= 0){
-        fprintf(stderr, "ERROR: Tried pushing but unable to, can add value: %d\n", value);
-        exit(0);
-    }*/
     sem_wait(&(buf->canAdd));
     buf->buffer[buf->tail].c = toAdd;
     buf->tail = (buf->tail + 1) % buf->size;
@@ -52,12 +46,6 @@ bool canPop(circular_buffer buf){
 }
 
 char pop(circular_buffer *buf){
-    /*int value;
-    sem_getvalue(&(buf->canPop), &value);
-    if(value <= 0){
-        fprintf(stderr, "ERROR: Tried popping but unable to\n");
-        exit(0);
-    }*/
     sem_wait(&(buf->canPop));
     char c = buf->buffer[buf->head].c;
     buf->head = (buf->head + 1) % buf->size;
@@ -76,12 +64,6 @@ bool canCount(circular_buffer buf){
 }
 
 char countNext(circular_buffer *buf){
-    /*int value;
-    sem_getvalue(&(buf->canCount), &value);
-    if(value <= 0){
-        fprintf(stderr, "ERROR: Tried counting but unable to\n");
-        exit(0);
-    }*/
     sem_wait(&(buf->canCount));
     char c = buf->buffer[buf->countPtr].c;
     buf->countPtr = (buf->countPtr + 1) % buf->size;
