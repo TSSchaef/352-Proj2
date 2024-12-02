@@ -8,6 +8,7 @@
     become corrupted.
 */ 
 
+// Initialize buffer
 void init_buffer(circular_buffer *buf, int size){
     buf->buffer = (element *) malloc(sizeof(element) * size);
     buf->size = size;
@@ -19,6 +20,7 @@ void init_buffer(circular_buffer *buf, int size){
     sem_init(&(buf->canPop), 0, 0);
 }
 
+//Destroy buffer
 void delete_buffer(circular_buffer *buf){
     free(buf->buffer);
     sem_destroy(&(buf->canAdd));
@@ -51,10 +53,6 @@ char pop(circular_buffer *buf){
     buf->head = (buf->head + 1) % buf->size;
     sem_post(&(buf->canAdd));
     return c;
-}
-
-bool isEmpty(const circular_buffer buf){
-    return buf.head == buf.tail;
 }
 
 bool canCount(circular_buffer buf){

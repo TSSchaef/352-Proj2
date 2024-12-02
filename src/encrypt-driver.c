@@ -4,6 +4,15 @@
 #include "encrypt-module.h"
 #include "circular-buffer.h"
 
+/*
+ *
+ * Implements a concurrent program that pipes data through the encrypt-module
+ * and then into an output file. Uses 5 threads, read, count input, encrypt, 
+ * count output, and write. Utilizes circular buffers for input and output, 
+ * and semaphores to synchronize the threads.
+ *
+ */
+
 int inputBufSize = -1, outputBufSize = -1;
 circular_buffer inputBuf, outputBuf;
 
@@ -17,7 +26,7 @@ sem_t reset, resetDone;
 
 void reset_requested() {
     resetting = true;
-    //wait for each of the threads
+    //wait for each of the threads to be ready to reset
     sem_wait(&reset);
     sem_wait(&reset);
     sem_wait(&reset);
@@ -42,6 +51,7 @@ void reset_finished() {
     sem_post(&resetDone);
 }
 
+// Read thread functionality
 void *read(void *arg){
     char c;
     while(1){
@@ -56,6 +66,7 @@ void *read(void *arg){
         }
         
         if(canAdd(inputBuf)){
+            // Done reading input
             if((c = read_input()) == EOF){
                 hitEOF = true;
                 sem_post(&inputCntThd);
@@ -65,12 +76,14 @@ void *read(void *arg){
             sem_post(&inputCntThd);
         } else {
             fprintf(stderr, "ERROR: Entered read logic mistakenly\n");
+            exit(1);
         }
     }
 
     return NULL;
 }
 
+// Count input thread functionality
 void *countInput(void *arg){
     bool hasWork;
     while(1){
@@ -96,11 +109,13 @@ void *countInput(void *arg){
             sem_post(&encryptInThd);
         } else {
             fprintf(stderr, "ERROR: Entered input count logic mistakenly\n");
+            exit(1);
         }
     }
     return NULL;
 }
 
+// Encrypt thread functionality
 void *encrypt_func(void *arg){
     bool hasWork;
     while(1){
@@ -130,14 +145,17 @@ void *encrypt_func(void *arg){
                 sem_post(&readThd);
             } else {
                 fprintf(stderr, "ERROR: Entered encrypt add logic mistakenly\n");
+                exit(1);
             }
         } else {
             fprintf(stderr, "ERROR: Entered encrypt pop logic mistakenly\n");
+            exit(1);
         }
     }
     return NULL;
 }
 
+// Count output thread functionality
 void *countOutput(void *arg){
     bool hasWork;
     while(1){
@@ -161,12 +179,14 @@ void *countOutput(void *arg){
             sem_post(&writeThd);
         } else {
             fprintf(stderr, "ERROR: Entered output count logic mistakenly\n");
+            exit(1);
         }
 
     }
     return NULL;
 }
 
+// Write thread functionality
 void *write(void *arg){
     bool hasWork;
     while(1){
@@ -185,6 +205,7 @@ void *write(void *arg){
             sem_post(&encryptOutThd);
         } else {
             fprintf(stderr, "ERROR: Entered write logic mistakenly\n");
+            exit(1);
         }
 
     }
@@ -197,6 +218,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }  
     
+    // Handling I/O
     init(argv[1], argv[2], argv[3]); 
 
     if(argc == 4){
@@ -220,10 +242,12 @@ int main(int argc, char *argv[]) {
             }
         }
     } else {
+        // Can add buffer sizes as command line arguments (for automized testing)
         inputBufSize = atoi(argv[4]);
         outputBufSize = atoi(argv[5]);
     }
 
+    // Initializing circular buffers and semaphores
     init_buffer(&inputBuf, inputBufSize);
     init_buffer(&outputBuf, outputBufSize);
 	
@@ -238,6 +262,7 @@ int main(int argc, char *argv[]) {
     sem_init(&writeThd, 0, 0);
 
 
+    // Initializing threads
     pthread_t reader, input_counter, encryptor, output_counter, writer;
     pthread_create(&reader, NULL, &read, NULL);
     pthread_create(&input_counter, NULL, &countInput, NULL);
@@ -245,6 +270,7 @@ int main(int argc, char *argv[]) {
     pthread_create(&output_counter, NULL, &countOutput, NULL);
     pthread_create(&writer, NULL, &write, NULL);
 
+    // Waiting for all threads to finish
     pthread_join(reader, NULL);
     pthread_join(input_counter, NULL);
     pthread_join(encryptor, NULL);
@@ -253,6 +279,8 @@ int main(int argc, char *argv[]) {
 
 	printf("End of file reached.\n"); 
 	log_counts();
+
+    // Tidying up data structures
     delete_buffer(&inputBuf);
     delete_buffer(&outputBuf);
 

@@ -3,9 +3,8 @@
 
 /*
     Header file for a circular buffer data structure. The buffer must be
-    initialized and destroyed and will hold exactly "size" elements (at most)
-    Mutex locks within each element allow each "slot" of the buffer to be
-    accessed by different threads concurrently
+    initialized and destroyed and will hold exactly "size" elements (at most).
+    Able to be accessed concurrently and maintained by semaphores.
 */
 #include <stdbool.h>
 #include <stdio.h>
